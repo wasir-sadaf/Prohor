@@ -1,0 +1,59 @@
+"""
+Response schema — the structured object the agent returns to the backend.
+
+The backend receives this from ``invoke_agent(request)`` and can
+directly serialize it to JSON for the frontend.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+from agent.schemas.evidence import LegalEvidence
+from agent.schemas.state import Intent, SafetyStatus
+
+
+class AgentResponse(BaseModel):
+    """Outgoing response from the Prohor legal agent."""
+
+    response: str = Field(description="The agent's text response to the user")
+    intent: Optional[str] = Field(
+        default=None,
+        description="Detected intent category",
+    )
+    citations: list[str] = Field(
+        default_factory=list,
+        description="Human-readable citation strings",
+    )
+    evidence: list[LegalEvidence] = Field(
+        default_factory=list,
+        description="Legal evidence backing the response",
+    )
+    needs_clarification: bool = Field(
+        default=False,
+        description="Whether the agent needs more info from the user",
+    )
+    clarification_question: Optional[str] = Field(
+        default=None,
+        description="Question to ask the user if clarification is needed",
+    )
+    safety_status: SafetyStatus = Field(
+        default=SafetyStatus.OK,
+        description="Result of safety validation",
+    )
+    safety_message: Optional[str] = Field(
+        default=None,
+        description="Warning or block message if safety check triggered",
+    )
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message if the agent encountered a problem",
+    )
+    model_used: str = Field(
+        default="unknown",
+        description="Name of the LLM model that produced the response",
+    )
+
+    model_config = {"use_enum_values": True}
