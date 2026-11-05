@@ -21,6 +21,7 @@ is active, produces deterministic, structured responses.
 from __future__ import annotations
 
 from agent.llm.factory import get_llm
+from agent.nodes.safety_validator import sanitize_user_input, sanitize_document_text
 from agent.schemas.message import ChatMessage
 from agent.schemas.state import AgentState, Intent
 
@@ -323,11 +324,14 @@ def generate_response(state: AgentState) -> AgentState:
     messages: list[ChatMessage] = [ChatMessage(role="system", content=system_prompt)]
 
     # Include conversation history for context (preserves memory)
+    # Sanitize history messages to prevent injection
     for msg in state.conversation_history:
-        messages.append(msg)
+        safe_content = sanitize_user_input(msg.content)
+        messages.append(ChatMessage(role=msg.role, content=safe_content))
 
-    # Add current user query
-    messages.append(ChatMessage(role="user", content=state.user_query))
+    # Add current user query (sanitized)
+    safe_query = sanitize_user_input(state.user_query)
+    messages.append(ChatMessage(role="user", content=safe_query))
 
     state.reasoning_status = "reasoning"
 
@@ -339,8 +343,41 @@ def generate_response(state: AgentState) -> AgentState:
         # Generate citations from evidence only
         state.citations = [ev.format_citation() for ev in state.evidence]
 
+        # ── Handle empty evidence ────────────────────────────────
+        if not state.evidence or all(
+            ev.law_or_regulation == "N/A" for ev in state.evidence
+        ):
+            # Acknowledge that reliable legal info couldn't be established
+            bn = state.language == "bn"
+            if bn:
+                notice = (
+                    "\n\nনোট: এই প্রশ্নের জন্য নির্ভরযোগ্য আইনি তথ্য "
+                    "পাওয়া যায়নি। উপরের তথ্য সাধারণ জ্ঞানের উপর ভিত্তি করে। "
+                    "নির্দিষ্ট আইনি পরামর্শের জন্য আইনজীবীর সাথে পরামর্শ করুন।"
+                )
+            else:
+                notice = (
+                    "\n\nNote: Reliable legal information could not be "
+                    "established for this query. The information above is "
+                    "based on general knowledge. Please consult a qualified "
+                    "lawyer for specific legal guidance."
+                )
+            state.generated_response = response_text + notice
+
     except Exception as exc:
         state.error = f"LLM call failed: {exc!s}"
         state.reasoning_status = "error"
+        # Fallback response
+        bn = state.language == "bn"
+        if bn:
+            state.generated_response = (
+                "দুঃখিত, এই মুহূর্তে আমি আপনার প্রশ্নের উত্তর দিতে পারছি না। "
+                "অনুগ্রহ করে পরে আবার চেষ্টা করুন।"
+            )
+        else:
+            state.generated_response = (
+                "I apologize, I'm unable to process your request at this time. "
+                "Please try again later."
+            )
 
     return state

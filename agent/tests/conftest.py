@@ -11,5 +11,6 @@ _AGENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _AGENT_DIR not in sys.path:
     sys.path.insert(0, _AGENT_DIR)
 
-# Force mock LLM for all tests
-os.environ.setdefault("LLM_PROVIDER", "mock")
+# Force mock LLM for all tests — must override the default (openai)
+# so tests never make real API calls.
+os.environ["LLM_PROVIDER"] = "mock"

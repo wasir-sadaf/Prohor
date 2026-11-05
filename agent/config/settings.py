@@ -3,6 +3,9 @@ Centralized LLM and application configuration.
 
 All sensitive values are read from environment variables. No keys
 are ever hard-coded.
+
+Loads from agent/.env file if present (via python-dotenv), then
+falls back to OS environment variables.
 """
 
 import os
@@ -10,6 +13,16 @@ from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+# ── Load .env file if present ────────────────────────────────────
+# python-dotenv is already a dependency through langchain-core.
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+if os.path.exists(_env_path):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_path)
+    except ImportError:
+        pass
 
 
 class LLMProvider(str, Enum):
@@ -23,13 +36,13 @@ class Settings(BaseModel):
 
     # ── LLM provider ────────────────────────────────────────────
     llm_provider: LLMProvider = Field(
-        default=LLMProvider.MOCK,
-        description="Which LLM backend to use",
+        default=LLMProvider.OPENAI,
+        description="Which LLM backend to use (openai, google, mock)",
     )
 
     # ── OpenAI ──────────────────────────────────────────────────
     openai_api_key: Optional[str] = Field(default=None)
-    openai_model: str = Field(default="gpt-4o")
+    openai_model: str = Field(default="gpt-6-luna")
 
     # ── Google / Gemini ──────────────────────────────────────────
     google_api_key: Optional[str] = Field(default=None)
@@ -43,21 +56,15 @@ class Settings(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-def _bool_from_env(value: Optional[str], default: bool) -> bool:
-    if value is None:
-        return default
-    return value.lower() in ("1", "true", "yes")
-
-
 def get_settings() -> Settings:
     """Build a Settings instance from the current environment."""
 
-    provider_raw = os.getenv("LLM_PROVIDER", "mock").lower()
+    provider_raw = os.getenv("LLM_PROVIDER", "openai").lower()
 
     return Settings(
         llm_provider=LLMProvider(provider_raw),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
-        openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+        openai_model=os.getenv("OPENAI_MODEL", "gpt-6-luna"),
         google_api_key=os.getenv("GOOGLE_API_KEY"),
         google_model=os.getenv("GOOGLE_MODEL", "gemini-1.5-flash"),
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.3")),

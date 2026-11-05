@@ -7,12 +7,20 @@ client, and stores the returned evidence in state.
 
 When context analysis has identified a legal domain, the retrieval
 query is enriched to improve relevance.
+
+RAG client selection:
+    - If PROHOR_BACKEND_URL is set, uses BackendRAGClient
+    - Otherwise, uses MockRAGClient for local development
+    - Can be overridden via set_rag_client() for testing
 """
 
 from __future__ import annotations
 
+import os
+
 from agent.rag.interface import RAGClient, RAGQuery
 from agent.rag.mock import MockRAGClient
+from agent.rag.backend_client import BackendRAGClient
 from agent.schemas.state import AgentState
 
 
@@ -21,10 +29,20 @@ _rag_client: RAGClient | None = None
 
 
 def get_rag_client() -> RAGClient:
-    """Return the RAG client (mock by default). Replace with real impl later."""
+    """Return the RAG client (auto-selected, cached)."""
     global _rag_client
-    if _rag_client is None:
+    if _rag_client is not None:
+        return _rag_client
+
+    backend_url = os.getenv("PROHOR_BACKEND_URL", "").strip()
+    if backend_url:
+        _rag_client = BackendRAGClient(
+            backend_url=backend_url,
+            backend_token=os.getenv("PROHOR_BACKEND_TOKEN"),
+        )
+    else:
         _rag_client = MockRAGClient()
+
     return _rag_client
 
 
@@ -40,7 +58,7 @@ def retrieve_evidence(state: AgentState) -> AgentState:
 
     Skips retrieval if the intent is OUT_OF_SCOPE or no tools include
     'rag_retrieve'. Enriches the query with context analysis results
-    when available.
+    when available. Handles empty results gracefully.
     """
     if "rag_retrieve" not in state.selected_tools:
         return state
@@ -52,8 +70,6 @@ def retrieve_evidence(state: AgentState) -> AgentState:
         return state
 
     # ── Build enriched query ────────────────────────────────────
-    # If context analysis identified a legal domain, enrich the query
-    # to improve retrieval relevance.
     query_text = state.user_query
     if state.legal_domain and state.legal_domain != "general legal":
         query_text = f"{state.legal_domain} {query_text}"
@@ -69,7 +85,13 @@ def retrieve_evidence(state: AgentState) -> AgentState:
         results = client.retrieve(rag_query)
         state.evidence = [r.to_evidence() for r in results]
         state.reasoning_status = "retrieving"
+
+        # ── Handle empty results ────────────────────────────────
+        if not state.evidence:
+            state.evidence = []
+            # The response generator will acknowledge the gap
     except Exception as exc:
         state.error = f"RAG retrieval failed: {exc!s}"
+        state.evidence = []
 
     return state

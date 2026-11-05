@@ -3,7 +3,9 @@ Legal evidence model — structured representation of a piece of
 legal information retrieved from the RAG pipeline.
 
 This is the data model that the RAG integration contract returns and
-that the agent carries through its state.
+that the agent carries through its state. It includes source and chunk
+IDs so the backend can save citation relationships through the
+message_sources table.
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ class LegalEvidence(BaseModel):
     retrieved_content: str = Field(description="The actual text content retrieved")
     source_url: Optional[str] = Field(
         default=None,
-        description="URL where the source can be verified",
+        description="URL where the source can be verified (maps to legal_sources.url)",
     )
     issuing_authority: Optional[str] = Field(
         default=None,
@@ -34,6 +36,20 @@ class LegalEvidence(BaseModel):
     effective_date: Optional[str] = Field(
         default=None,
         description="Date this law or provision took effect (ISO format when possible)",
+    )
+
+    # ── Backend integration IDs ──────────────────────────────────
+    source_id: Optional[str] = Field(
+        default=None,
+        description="UUID of the legal_sources row in Supabase, for message_sources linkage",
+    )
+    chunk_id: Optional[str] = Field(
+        default=None,
+        description="UUID of the legal_chunks row in Supabase, for message_sources linkage",
+    )
+    is_verified: bool = Field(
+        default=False,
+        description="Whether the source is marked as verified in the database",
     )
 
     def format_citation(self) -> str:

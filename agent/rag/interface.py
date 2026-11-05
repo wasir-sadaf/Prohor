@@ -9,8 +9,8 @@ contract that both sides agree on:
     Agent  ──→  RAGClient.retrieve(query)  ──→  list[RAGResult]
 
 A mock implementation (``MockRAGClient``) is provided for development
-and testing.  The real implementation will be a thin adapter that
-calls the actual RAG service.
+and testing.  A backend adapter (``BackendRAGClient``) connects to the
+real Node.js legal search API.
 """
 
 from __future__ import annotations
@@ -50,6 +50,11 @@ class RAGResult(BaseModel):
     effective_date: Optional[str] = Field(default=None)
     relevance_score: float = Field(default=0.0)
 
+    # ── Backend integration IDs ──────────────────────────────────
+    source_id: Optional[str] = Field(default=None, description="UUID of legal_sources row")
+    chunk_id: Optional[str] = Field(default=None, description="UUID of legal_chunks row")
+    is_verified: bool = Field(default=False, description="Whether source is verified in DB")
+
     def to_evidence(self) -> LegalEvidence:
         """Convert this raw RAG result to the agent's evidence model."""
         return LegalEvidence(
@@ -60,6 +65,9 @@ class RAGResult(BaseModel):
             source_url=self.source_url,
             issuing_authority=self.issuing_authority,
             effective_date=self.effective_date,
+            source_id=self.source_id,
+            chunk_id=self.chunk_id,
+            is_verified=self.is_verified,
         )
 
 
